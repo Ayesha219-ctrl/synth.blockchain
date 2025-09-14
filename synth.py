@@ -1,15 +1,12 @@
-# Install SDV library (only once per Colab session)
-
-
 import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
 from sdv.metadata import SingleTableMetadata
 from sdv.single_table import CTGANSynthesizer
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import ks_2samp
 import streamlit as st
-import numpy as np
-from datetime import datetime, timedelta
 
 # Streamlit App
 st.title("Blockchain Data Synthesis and Evaluation App")
@@ -24,7 +21,14 @@ if uploaded_file is not None:
     st.write("Columns in dataset:", df.columns.tolist())
 
     # Step 2: Drop unneeded columns
-    columns_to_drop = st.multiselect("Select columns to drop", df.columns.tolist())
+    # Dynamically set default columns that exist in the DataFrame
+    possible_defaults = ["ID", "Timestamp"]
+    valid_defaults = [col for col in possible_defaults if col in df.columns]
+    columns_to_drop = st.multiselect(
+        "Select columns to drop (e.g., ID, Timestamp)",
+        df.columns.tolist(),
+        default=valid_defaults
+    )
     dropped_columns = [col for col in columns_to_drop if col in df.columns]
     df_cleaned = df.drop(columns=dropped_columns, errors="ignore")
 
@@ -86,12 +90,29 @@ if uploaded_file is not None:
         # Save combined synthetic dataset
         output_file = "Combined_Synthetic_Blockchain_Data_CTGAN.xlsx"
         combined_synthetic_data.to_excel(output_file, index=False)
-        st.download_button("Download Combined Synthetic Data", data=combined_synthetic_data.to_csv(index=False), file_name="Combined_Synthetic_Blockchain_Data_CTGAN.csv")
+        st.download_button(
+            label="Download Combined Synthetic Data",
+            data=combined_synthetic_data.to_csv(index=False),
+            file_name="Combined_Synthetic_Blockchain_Data_CTGAN.csv",
+            mime="text/csv"
+        )
         st.write(f"✅ Combined synthetic data saved as: {output_file}")
 
         # Step 9: Distribution Comparison
         st.header("Distribution Comparisons")
         for col in df_filtered.columns:
+            # Categorical columns
+            if not pd.api.types.is_numeric_dtype(df_filtered[col]):
+                st.subheader(f"Categorical Distribution: {col}")
+                fig_cat, ax_cat = plt.subplots(figsize=(6,4))
+                real_counts = df_filtered[col].value_counts(normalize=True)
+                synth_counts = synthetic_data[col].value_counts(normalize=True)
+                pd.DataFrame({"Real": real_counts, "Synthetic": synth_counts}).plot(kind="bar", ax=ax_cat)
+                ax_cat.set_title(f"Categorical Distribution: {col}")
+                ax_cat.set_ylabel("Proportion")
+                st.pyplot(fig_cat)
+            
+            # Numeric columns
             if pd.api.types.is_numeric_dtype(df_filtered[col]):
                 # KS Test
                 ks_stat, p_value = ks_2samp(df_filtered[col], synthetic_data[col])
